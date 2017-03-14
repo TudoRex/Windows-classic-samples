@@ -12,6 +12,15 @@
 #ifndef IOCPSERVER_H
 #define IOCPSERVER_H
 
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+
+#include <winsock2.h>
+#include <mswsock.h>
+#include <Ws2tcpip.h>
 #include <mswsock.h>
 
 #define DEFAULT_PORT        "5001"
@@ -67,17 +76,17 @@ BOOL WINAPI CtrlHandler(
     DWORD dwEvent
     );
 
-BOOL CreateListenSocket(void);
+BOOL user_CreateListenSocket(void);
 
-BOOL CreateAcceptSocket(
+BOOL user_CreateAcceptSocket(
     BOOL fUpdateIOCP
     );
 
-DWORD WINAPI WorkerThread (
+DWORD WINAPI WorkerThreadNative (
     LPVOID WorkContext
     );
 
-PPER_SOCKET_CONTEXT UpdateCompletionPort(
+PPER_SOCKET_CONTEXT user_UpdateCompletionPort(
     SOCKET s,
     IO_OPERATION ClientIo,
     BOOL bAddToList
@@ -108,5 +117,27 @@ VOID CtxtListAddTo (
 VOID CtxtListDeleteFrom(
     PPER_SOCKET_CONTEXT lpPerSocketContext
     );
+
+// IocpSocket.cpp
+SOCKET user_CreateSocket(void);
+BOOL user_CreateListenSocket(void);
+
+// global
+extern char *g_Port;
+extern BOOL g_bEndServer;
+extern HANDLE g_hIOCP;
+extern SOCKET g_sdListen;
+extern BOOL g_bRestart;
+extern BOOL g_bVerbose;
+extern HANDLE g_ThreadHandles[MAX_WORKER_THREAD];
+extern WSAEVENT g_hCleanupEvent[1];
+
+extern PPER_SOCKET_CONTEXT g_pCtxtListenSocket;
+extern PPER_SOCKET_CONTEXT g_pCtxtList;
+
+#include <mutex>
+extern std::mutex g_Mutex;
+extern std::unique_lock<std::mutex> g_CtxtListLock;
+
 
 #endif
