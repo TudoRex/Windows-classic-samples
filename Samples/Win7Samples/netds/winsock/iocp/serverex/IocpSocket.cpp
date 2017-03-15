@@ -1,6 +1,7 @@
 #include "IocpServer.h"
 #include "util.h"
 #include <winsock2.h>
+#include <iostream>
 
 SOCKET g_sdListen = INVALID_SOCKET;
 //
@@ -8,7 +9,13 @@ SOCKET g_sdListen = INVALID_SOCKET;
 // and set linger.
 //
 
-SOCKET user_CreateSocket(void) {
+
+static void SetSocketSendBuf(SOCKET hSock, int nBufSize)
+{
+
+}
+
+SOCKET user_CreateWSASocket(void) {
 	int nRet = 0;
 	int nZero = 0;
 	SOCKET sdSocket = INVALID_SOCKET;
@@ -105,8 +112,16 @@ BOOL user_CreateListenSocket(void) {
 		myprintf("getaddrinfo() failed to resolve/convert the interface\n");
 		return(FALSE);
 	}
+	else
+	{
+		struct addrinfo* ptr = addrlocal;
+		for (; ptr; ptr = ptr->ai_next)
+		{
+			std::cout << inet_ntoa(*(in_addr*)(ptr->ai_addr)) << std::endl;
+		}
+	}
 
-	g_sdListen = user_CreateSocket();
+	g_sdListen = user_CreateWSASocket();
 	if (g_sdListen == INVALID_SOCKET) {
 		freeaddrinfo(addrlocal);
 		return(FALSE);
@@ -119,7 +134,7 @@ BOOL user_CreateListenSocket(void) {
 		return(FALSE);
 	}
 
-	nRet = listen(g_sdListen, 5);
+	nRet = listen(g_sdListen, 10);
 	if (nRet == SOCKET_ERROR) {
 		myprintf("listen() failed: %d\n", WSAGetLastError());
 		freeaddrinfo(addrlocal);
@@ -161,57 +176,44 @@ BOOL user_CreateListenSocket(void) {
 // This sample implements neither of these techniques and is therefore
 // susceptible to the behaviour described above.
 //
-BOOL user_CreateAcceptSocket(BOOL fUpdateIOCP) {
+BOOL user_UpdateIOCPWithAllocatedAcceptSocket(SOCKET sockListen,HANDLE iocp, BOOL fUpdateIOCP) {
 
 	int nRet = 0;
 	DWORD dwRecvNumBytes = 0;
-	DWORD bytes = 0;
-
-	//
-	// GUID to Microsoft specific extensions
-	//
-	GUID acceptex_guid = WSAID_ACCEPTEX;
+	
+	LPFN_ACCEPTEX pfnAcceptEx = NULL;
+	
+	
 
 	//
 	//The context for listening socket uses the SockAccept member to store the
 	//socket for client connection. 
 	//
 	if (fUpdateIOCP) {
-		g_pCtxtListenSocket = user_UpdateCompletionPort(g_sdListen, ClientIoAccept, FALSE);
+		g_pCtxtListenSocket = user_UpdateCompletionPort(sockListen, iocp, ClientIoAccept, FALSE);
 		if (g_pCtxtListenSocket == NULL) {
 			myprintf("failed to update listen socket to IOCP\n");
 			return(FALSE);
 		}
-
-		// Load the AcceptEx extension function from the provider for this socket
-		nRet = WSAIoctl(
-			g_sdListen,
-			SIO_GET_EXTENSION_FUNCTION_POINTER,
-			&acceptex_guid,
-			sizeof(acceptex_guid),
-			&g_pCtxtListenSocket->fnAcceptEx,
-			sizeof(g_pCtxtListenSocket->fnAcceptEx),
-			&bytes,
-			NULL,
-			NULL
-			);
-		if (nRet == SOCKET_ERROR)
+		if (FALSE == LoadExtensionRoutineAcceptEx(sockListen, &pfnAcceptEx))
 		{
-			myprintf("failed to load AcceptEx: %d\n", WSAGetLastError());
-			return (FALSE);
+			return FALSE;
 		}
+		g_pCtxtListenSocket->fnAcceptEx = pfnAcceptEx;
+		
 	}
 
-	g_pCtxtListenSocket->pIOContext->SocketAccept = user_CreateSocket();
-	if (g_pCtxtListenSocket->pIOContext->SocketAccept == INVALID_SOCKET) {
+	SOCKET sockAccept = user_CreateWSASocket();
+	if (sockAccept == INVALID_SOCKET) {
 		myprintf("failed to create new accept socket\n");
 		return(FALSE);
 	}
+	g_pCtxtListenSocket->pIOContext->SocketAccept = sockAccept;
 
 	//
 	// pay close attention to these parameters and buffer lengths
-	//
-	nRet = g_pCtxtListenSocket->fnAcceptEx(g_sdListen, g_pCtxtListenSocket->pIOContext->SocketAccept,
+	//										
+	nRet = pfnAcceptEx(sockListen, sockAccept,
 		(LPVOID)(g_pCtxtListenSocket->pIOContext->Buffer),
 		MAX_BUFF_SIZE - (2 * (sizeof(SOCKADDR_STORAGE) + 16)),
 		sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16,
@@ -225,12 +227,39 @@ BOOL user_CreateAcceptSocket(BOOL fUpdateIOCP) {
 	return(TRUE);
 }
 
+bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* pfn)
+{
+	//
+	// GUID to Microsoft specific extensions
+	//
+	GUID acceptex_guid = WSAID_ACCEPTEX;
+	DWORD bytes = 0;
+
+	// Load the AcceptEx extension function from the provider for this socket
+	int nRet = WSAIoctl(
+		sockListen,
+		SIO_GET_EXTENSION_FUNCTION_POINTER,
+		&acceptex_guid,
+		sizeof(acceptex_guid),
+		&pfn,
+		sizeof(pfn),
+		&bytes,
+		NULL,
+		NULL
+		);
+	if (nRet == SOCKET_ERROR)
+	{
+		myprintf("failed to load AcceptEx: %d\n", WSAGetLastError());
+		return (FALSE);
+	}
+	return TRUE;
+}
 
 //
 //  Allocate a context structures for the socket and add the socket to the IOCP.  
 //  Additionally, add the context structure to the global list of context structures.
 //
-PPER_SOCKET_CONTEXT user_UpdateCompletionPort(SOCKET sd, IO_OPERATION ClientIo,
+PPER_SOCKET_CONTEXT user_UpdateCompletionPort(SOCKET sd, HANDLE iocp, IO_OPERATION ClientIo,
 	BOOL bAddToList)	{
 
 	PPER_SOCKET_CONTEXT lpPerSocketContext;
@@ -239,8 +268,8 @@ PPER_SOCKET_CONTEXT user_UpdateCompletionPort(SOCKET sd, IO_OPERATION ClientIo,
 	if (lpPerSocketContext == NULL)
 		return(NULL);
 
-	g_hIOCP = CreateIoCompletionPort((HANDLE)sd, g_hIOCP, (DWORD_PTR)lpPerSocketContext, 0);
-	if (g_hIOCP == NULL) {
+	HANDLE _iocp = CreateIoCompletionPort((HANDLE)sd, iocp, (DWORD_PTR)lpPerSocketContext, 0);
+	if (_iocp == NULL) {
 		myprintf("CreateIoCompletionPort() failed: %d\n", GetLastError());
 		if (lpPerSocketContext->pIOContext)
 			xfree(lpPerSocketContext->pIOContext);

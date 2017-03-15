@@ -70,15 +70,17 @@ typedef struct _PER_SOCKET_CONTEXT {
     struct _PER_SOCKET_CONTEXT  *pCtxtForward;
 } PER_SOCKET_CONTEXT, *PPER_SOCKET_CONTEXT;
 
-BOOL ValidOptions(int argc, char *argv[]);
+BOOL user_ValidOptions(int argc, char *argv[]);
 
-BOOL WINAPI CtrlHandler(
+BOOL WINAPI user_CtrlHandler(
     DWORD dwEvent
     );
 
 BOOL user_CreateListenSocket(void);
 
-BOOL user_CreateAcceptSocket(
+BOOL user_UpdateIOCPWithAllocatedAcceptSocket(
+	SOCKET sd,
+	HANDLE iocp,
     BOOL fUpdateIOCP
     );
 
@@ -88,6 +90,7 @@ DWORD WINAPI WorkerThreadNative (
 
 PPER_SOCKET_CONTEXT user_UpdateCompletionPort(
     SOCKET s,
+	HANDLE iocp,
     IO_OPERATION ClientIo,
     BOOL bAddToList
     );
@@ -119,7 +122,7 @@ VOID CtxtListDeleteFrom(
     );
 
 // IocpSocket.cpp
-SOCKET user_CreateSocket(void);
+SOCKET user_CreateWSASocket(void);
 BOOL user_CreateListenSocket(void);
 
 // global

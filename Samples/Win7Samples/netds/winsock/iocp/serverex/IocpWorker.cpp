@@ -120,6 +120,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 
 			lpAcceptSocketContext = user_UpdateCompletionPort(
 				lpPerSocketContext->pIOContext->SocketAccept,
+				g_hIOCP,
 				ClientIoAccept, TRUE);
 
 			if (lpAcceptSocketContext == NULL) {
@@ -186,7 +187,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 			//
 			//Time to post another outstanding AcceptEx
 			//
-			if (!user_CreateAcceptSocket(FALSE)) {
+			if (!user_UpdateIOCPWithAllocatedAcceptSocket(FALSE)) {
 				myprintf("Please shut down and reboot the server.\n");
 				WSASetEvent(g_hCleanupEvent[0]);
 				return(0);

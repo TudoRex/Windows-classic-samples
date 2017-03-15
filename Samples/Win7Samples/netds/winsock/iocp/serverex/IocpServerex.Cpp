@@ -159,7 +159,7 @@ void __cdecl main (int argc, char *argv[])	{
 			if( !user_CreateListenSocket() )
 				__leave;
 
-			if( !user_CreateAcceptSocket(TRUE) )
+			if( !user_UpdateIOCPWithAllocatedAcceptSocket(TRUE) )
 				__leave;
 
 			WSAWaitForMultipleEvents(1, g_hCleanupEvent, TRUE, WSA_INFINITE, FALSE);

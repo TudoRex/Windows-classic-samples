@@ -408,7 +408,7 @@ BOOL CreateListenSocket(void) {
 		return(FALSE);
 	}
 
-	nRet = listen(g_sdListen, 5);
+	nRet = listen(g_sdListen, SO);
 	if( nRet == SOCKET_ERROR ) {
 		myprintf("listen() failed: %d\n", WSAGetLastError());
 		return(FALSE);
