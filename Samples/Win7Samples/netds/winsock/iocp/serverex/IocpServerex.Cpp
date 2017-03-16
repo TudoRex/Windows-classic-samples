@@ -48,10 +48,11 @@
 #include "iocpserver.h"
 #include "util.h"
 
+LPFN_ACCEPTEX g_AcceptEx = NULL;
 char *g_Port = DEFAULT_PORT;
 BOOL g_bEndServer = FALSE;			// set to TRUE on CTRL-C
 BOOL g_bRestart = TRUE;				// set to TRUE to CTRL-BRK
-BOOL g_bVerbose = FALSE;
+BOOL g_bVerbose = TRUE;
 HANDLE g_hIOCP = INVALID_HANDLE_VALUE;
 HANDLE g_ThreadHandles[MAX_WORKER_THREAD];
 WSAEVENT g_hCleanupEvent[1];
@@ -100,6 +101,9 @@ void __cdecl main (int argc, char *argv[])	{
 		}
 		return;
 	}
+	
+
+
 	/* todo≥ı ºªØ ß∞‹CriticalSection
     __try
     {
@@ -123,6 +127,17 @@ void __cdecl main (int argc, char *argv[])	{
 		WSAResetEvent(g_hCleanupEvent[0]);
 
 		__try	{
+			if (!user_CreateListenSocket())
+				__leave;
+			if (!g_AcceptEx)
+			{
+				LoadExtensionRoutineAcceptEx(g_sdListen, &g_AcceptEx);
+				if (!g_AcceptEx)
+				{
+					myprintf("fail to Load routine AcceptEx()\n.");
+					__leave;
+				}
+			}
 
             //
 			// notice that we will create more worker threads (dwThreadCount) than 
@@ -154,12 +169,13 @@ void __cdecl main (int argc, char *argv[])	{
 				}
 				g_ThreadHandles[dwCPU] = hThread;
 				hThread = INVALID_HANDLE_VALUE;
+				myprintf("WorkerThread(%d) created from main(%d).\n", dwThreadId, GetCurrentThreadId());
 			}
+			
 
-			if( !user_CreateListenSocket() )
-				__leave;
+			
 
-			if( !user_UpdateIOCPWithAllocatedAcceptSocket(TRUE) )
+			if( !user_UpdateIOCPWithAllocatedAcceptSocket(g_sdListen, g_hIOCP, TRUE) )
 				__leave;
 
 			WSAWaitForMultipleEvents(1, g_hCleanupEvent, TRUE, WSA_INFINITE, FALSE);
@@ -321,16 +337,16 @@ BOOL WINAPI user_CtrlHandler (DWORD dwEvent)	{
 //  any context data associated with that socket is free'd.
 //
 VOID CloseClient (PPER_SOCKET_CONTEXT lpPerSocketContext, BOOL bGraceful)	{
-
-	__try
-    {
-		g_CtxtListLock.lock();
-    }
-    __except(EXCEPTION_EXECUTE_HANDLER)
-    {
-        myprintf("EnterCriticalSection raised an exception.\n");
-        return;
-    }
+// 	__try
+//     {
+// 		g_CtxtListLock.lock();
+//     }
+//     __except(EXCEPTION_EXECUTE_HANDLER)
+//     {
+//         myprintf("EnterCriticalSection raised an exception.\n");s
+//         return;
+//     }
+	g_CtxtListLock.lock();
 
 	if( lpPerSocketContext ) {
 		if( g_bVerbose )

@@ -34,6 +34,9 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 	DWORD dwIoSize = 0;
 	HRESULT hRet;
 
+	DWORD dwThreadID = GetCurrentThreadId();
+	myprintf("run WorkThread ID:%d\n", dwThreadID);
+
 	while (TRUE) {
 
 		//
@@ -90,7 +93,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 		//
 		switch (lpIOContext->IOOperation) {
 		case ClientIoAccept:
-
+			myprintf("[Thread %d]-->ClientIoAccept\n", dwThreadID);
 			//
 			// When the AcceptEx function returns, the socket sAcceptSocket is 
 			// in the default state for a connected socket. The socket sAcceptSocket 
@@ -113,7 +116,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				//
 				//just warn user here.
 				//
-				myprintf("setsockopt(SO_UPDATE_ACCEPT_CONTEXT) failed to update accept socket\n");
+				myprintf("[Thread %d]-->ClientIoAccept-->setsockopt(SO_UPDATE_ACCEPT_CONTEXT) failed to update accept socket\n", dwThreadID);
 				WSASetEvent(g_hCleanupEvent[0]);
 				return(0);
 			}
@@ -122,6 +125,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				lpPerSocketContext->pIOContext->SocketAccept,
 				g_hIOCP,
 				ClientIoAccept, TRUE);
+			myprintf("[Thread %d]-->ClientIoAccept-->user_UpdateCompletionPort(%p,%p)\n", dwThreadID, lpPerSocketContext->pIOContext->SocketAccept, g_hIOCP);
 
 			if (lpAcceptSocketContext == NULL) {
 
@@ -134,6 +138,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 			}
 
 			if (dwIoSize) {
+				myprintf("[Thread %d]-->ClientIoAccept--> dwIoSize(%d)\n", dwThreadID, dwIoSize);
 				lpAcceptSocketContext->pIOContext->IOOperation = ClientIoWrite;
 				lpAcceptSocketContext->pIOContext->nTotalBytes = dwIoSize;
 				lpAcceptSocketContext->pIOContext->nSentBytes = 0;
@@ -167,6 +172,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				// AcceptEx completes but doesn't read any data so we need to post
 				// an outstanding overlapped read.
 				//
+				myprintf("[%d]-->ClientIoAccept--> ClientIoRead\n", dwThreadID);
 				lpAcceptSocketContext->pIOContext->IOOperation = ClientIoRead;
 				dwRecvNumBytes = 0;
 				dwFlags = 0;
@@ -187,7 +193,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 			//
 			//Time to post another outstanding AcceptEx
 			//
-			if (!user_UpdateIOCPWithAllocatedAcceptSocket(FALSE)) {
+			if (!user_UpdateIOCPWithAllocatedAcceptSocket(g_sdListen, g_hIOCP, FALSE)) {
 				myprintf("Please shut down and reboot the server.\n");
 				WSASetEvent(g_hCleanupEvent[0]);
 				return(0);
@@ -196,7 +202,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 
 
 		case ClientIoRead:
-
+			myprintf("[Thread %d]--> case ClientIoRead\n", dwThreadID);
 			//
 			// a read operation has completed, post a write operation to echo the
 			// data back to the client using the same data buffer.
@@ -222,7 +228,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 			break;
 
 		case ClientIoWrite:
-
+			myprintf("[Thread %d]--> case ClientIoWrite\n", dwThreadID);
 			//
 			// a write operation has completed, determine if all the data intended to be
 			// sent actually was sent.
@@ -291,15 +297,16 @@ VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext)	{
 
 	PPER_SOCKET_CONTEXT pTemp;
 
-	__try
-	{
-		g_CtxtListLock.lock();
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return;
-	}
+// 	__try
+// 	{
+// 		g_CtxtListLock.lock();
+// 	}
+// 	__except (EXCEPTION_EXECUTE_HANDLER)
+// 	{
+// 		myprintf("EnterCriticalSection raised an exception.\n");
+// 		return;
+// 	}
+	g_CtxtListLock.lock();
 
 	if (g_pCtxtList == NULL) {
 
@@ -339,15 +346,16 @@ VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext)	{
 	PPER_IO_CONTEXT     pNextIO = NULL;
 	PPER_IO_CONTEXT     pTempIO = NULL;
 
-	__try
-	{
-		g_CtxtListLock.lock();
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return;
-	}
+// 	__try
+// 	{
+// 		g_CtxtListLock.lock();
+// 	}
+// 	__except (EXCEPTION_EXECUTE_HANDLER)
+// 	{
+// 		myprintf("EnterCriticalSection raised an exception.\n");
+// 		return;
+// 	}
+	g_CtxtListLock.lock();
 
 	if (lpPerSocketContext) {
 		pBack = lpPerSocketContext->pCtxtBack;
@@ -424,15 +432,16 @@ PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO)	{
 
 	PPER_SOCKET_CONTEXT lpPerSocketContext;
 
-	__try
-	{
-		g_CtxtListLock.lock();
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return NULL;
-	}
+// 	__try
+// 	{
+// 		g_CtxtListLock.lock();
+// 	}
+// 	__except (EXCEPTION_EXECUTE_HANDLER)
+// 	{
+// 		myprintf("EnterCriticalSection raised an exception.\n");
+// 		return NULL;
+// 	}
+	g_CtxtListLock.lock();
 
 	lpPerSocketContext = (PPER_SOCKET_CONTEXT)xmalloc(sizeof(PER_SOCKET_CONTEXT));
 	if (lpPerSocketContext) {
@@ -481,12 +490,12 @@ VOID CtxtListFree() {
 	PPER_SOCKET_CONTEXT pTemp1, pTemp2;
 
 
-	g_CtxtListLock.lock();
 	//     __except(EXCEPTION_EXECUTE_HANDLER)
 	//     {
 	//         myprintf("EnterCriticalSection raised an exception.\n");
 	//         return;
 	//     }
+	g_CtxtListLock.lock();
 
 	pTemp1 = g_pCtxtList;
 	while (pTemp1) {

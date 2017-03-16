@@ -117,7 +117,8 @@ BOOL user_CreateListenSocket(void) {
 		struct addrinfo* ptr = addrlocal;
 		for (; ptr; ptr = ptr->ai_next)
 		{
-			std::cout << inet_ntoa(*(in_addr*)(ptr->ai_addr)) << std::endl;
+			struct sockaddr_in* pSockAddr = (sockaddr_in*)ptr->ai_addr;
+			myprintf("listen on {%s}addr[%s]port[%d]\n", ptr->ai_canonname, inet_ntoa(pSockAddr->sin_addr), ntohs(pSockAddr->sin_port));
 		}
 	}
 
@@ -133,13 +134,15 @@ BOOL user_CreateListenSocket(void) {
 		freeaddrinfo(addrlocal);
 		return(FALSE);
 	}
+	myprintf("bind() ok.\n");
 
-	nRet = listen(g_sdListen, 10);
+	nRet = listen(g_sdListen, SOMAXCONN);
 	if (nRet == SOCKET_ERROR) {
 		myprintf("listen() failed: %d\n", WSAGetLastError());
 		freeaddrinfo(addrlocal);
 		return(FALSE);
 	}
+	myprintf("listen() ok.\n");
 
 	freeaddrinfo(addrlocal);
 
@@ -181,10 +184,6 @@ BOOL user_UpdateIOCPWithAllocatedAcceptSocket(SOCKET sockListen,HANDLE iocp, BOO
 	int nRet = 0;
 	DWORD dwRecvNumBytes = 0;
 	
-	LPFN_ACCEPTEX pfnAcceptEx = NULL;
-	
-	
-
 	//
 	//The context for listening socket uses the SockAccept member to store the
 	//socket for client connection. 
@@ -195,11 +194,9 @@ BOOL user_UpdateIOCPWithAllocatedAcceptSocket(SOCKET sockListen,HANDLE iocp, BOO
 			myprintf("failed to update listen socket to IOCP\n");
 			return(FALSE);
 		}
-		if (FALSE == LoadExtensionRoutineAcceptEx(sockListen, &pfnAcceptEx))
-		{
-			return FALSE;
-		}
-		g_pCtxtListenSocket->fnAcceptEx = pfnAcceptEx;
+		myprintf("update listen socket to IOCP\n");
+//#error "Do not load AcceptEx in each thread."
+		g_pCtxtListenSocket->fnAcceptEx = g_AcceptEx;
 		
 	}
 
@@ -213,7 +210,7 @@ BOOL user_UpdateIOCPWithAllocatedAcceptSocket(SOCKET sockListen,HANDLE iocp, BOO
 	//
 	// pay close attention to these parameters and buffer lengths
 	//										
-	nRet = pfnAcceptEx(sockListen, sockAccept,
+	nRet = g_pCtxtListenSocket->fnAcceptEx(sockListen, sockAccept,
 		(LPVOID)(g_pCtxtListenSocket->pIOContext->Buffer),
 		MAX_BUFF_SIZE - (2 * (sizeof(SOCKADDR_STORAGE) + 16)),
 		sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16,
@@ -227,7 +224,7 @@ BOOL user_UpdateIOCPWithAllocatedAcceptSocket(SOCKET sockListen,HANDLE iocp, BOO
 	return(TRUE);
 }
 
-bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* pfn)
+bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* ppfn)
 {
 	//
 	// GUID to Microsoft specific extensions
@@ -241,8 +238,8 @@ bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* pfn)
 		SIO_GET_EXTENSION_FUNCTION_POINTER,
 		&acceptex_guid,
 		sizeof(acceptex_guid),
-		&pfn,
-		sizeof(pfn),
+		ppfn,
+		sizeof(*ppfn),
 		&bytes,
 		NULL,
 		NULL
@@ -252,6 +249,7 @@ bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* pfn)
 		myprintf("failed to load AcceptEx: %d\n", WSAGetLastError());
 		return (FALSE);
 	}
+	myprintf("load AcceptEx() @%p\n", *ppfn);
 	return TRUE;
 }
 
@@ -284,7 +282,7 @@ PPER_SOCKET_CONTEXT user_UpdateCompletionPort(SOCKET sd, HANDLE iocp, IO_OPERATI
 	if (bAddToList) CtxtListAddTo(lpPerSocketContext);
 
 	if (g_bVerbose)
-		myprintf("UpdateCompletionPort: Socket(%d) added to IOCP\n", lpPerSocketContext->Socket);
+		myprintf("UpdateCompletionPort: Socket(%p) added to IOCP\n", lpPerSocketContext->Socket);
 
 	return(lpPerSocketContext);
 }

@@ -23,7 +23,7 @@
 #include <Ws2tcpip.h>
 #include <mswsock.h>
 
-#define DEFAULT_PORT        "5001"
+#define DEFAULT_PORT        "15001"
 #define MAX_BUFF_SIZE       8192
 #define MAX_WORKER_THREAD   16
 
@@ -124,8 +124,10 @@ VOID CtxtListDeleteFrom(
 // IocpSocket.cpp
 SOCKET user_CreateWSASocket(void);
 BOOL user_CreateListenSocket(void);
+bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* ppfn);
 
 // global
+extern LPFN_ACCEPTEX g_AcceptEx;
 extern char *g_Port;
 extern BOOL g_bEndServer;
 extern HANDLE g_hIOCP;
@@ -141,6 +143,7 @@ extern PPER_SOCKET_CONTEXT g_pCtxtList;
 #include <mutex>
 extern std::mutex g_Mutex;
 extern std::unique_lock<std::mutex> g_CtxtListLock;
+
 
 
 #endif

@@ -68,7 +68,7 @@ typedef struct THREADINFO {
 	SOCKET sd[MAXTHREADS];
 } THREADINFO;
 
-static OPTIONS default_options = {"localhost", "5001", 1, 4096, FALSE};
+static OPTIONS default_options = {"localhost", "5001", 1, 4096, TRUE};
 static OPTIONS g_Options;
 static THREADINFO g_ThreadInfo;
 static BOOL g_bEndClient = FALSE;
@@ -121,6 +121,7 @@ int __cdecl main(int argc, char *argv[]) {
 		myprintf("WSAStartup() failed: %d", nRet);
 		return(1);
 	}
+	myprintf("WSAStartup() OK.\n");
 
 	if(WSA_INVALID_EVENT == (g_hCleanupEvent[0] = WSACreateEvent()))
 	{
@@ -128,6 +129,7 @@ int __cdecl main(int argc, char *argv[]) {
 		WSACleanup();
 		return(1);
 	}
+	myprintf("WSACreateEvent() ok.\n");
 
 	//
 	// be able to gracefully handle CTRL-C and close handles
