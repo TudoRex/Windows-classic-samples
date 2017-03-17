@@ -249,7 +249,7 @@ bool LoadExtensionRoutineAcceptEx(SOCKET sockListen, LPFN_ACCEPTEX* ppfn)
 		myprintf("failed to load AcceptEx: %d\n", WSAGetLastError());
 		return (FALSE);
 	}
-	myprintf("load AcceptEx() @%p\n", *ppfn);
+	myprintf("LoadExtensionRoutineAcceptEx() @%p\n", *ppfn);
 	return TRUE;
 }
 

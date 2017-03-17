@@ -84,7 +84,8 @@ void __cdecl main (int argc, char *argv[])	{
 	
 
 	GetSystemInfo(&systemInfo);
-	dwThreadCount = systemInfo.dwNumberOfProcessors * 2;
+	//dwThreadCount = systemInfo.dwNumberOfProcessors * 2;
+	dwThreadCount = systemInfo.dwNumberOfProcessors;
 
 	if(WSA_INVALID_EVENT == (g_hCleanupEvent[0] = WSACreateEvent()))
 	{

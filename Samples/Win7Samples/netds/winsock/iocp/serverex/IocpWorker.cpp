@@ -50,14 +50,15 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 			INFINITE
 			);
 		if (!bSuccess)
-			myprintf("GetQueuedCompletionStatus() failed: %d\n", GetLastError());
-
+			myprintf("[Thread %d]GetQueuedCompletionStatus() failed: %d\n", dwThreadID, GetLastError());
+		myprintf("[Thread %d]GetQueuedCompletionStatus() ok\n", dwThreadID);
 		if (lpPerSocketContext == NULL) {
 
 			//
 			// CTRL-C handler used PostQueuedCompletionStatus to post an I/O packet with
 			// a NULL CompletionKey (or if we get one for any reason).  It is time to exit.
 			//
+			myprintf("[Thread %d]GetQueuedCompletionStatus() Get Null CompletionKey\n", dwThreadID);
 			return(0);
 		}
 
@@ -116,7 +117,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				//
 				//just warn user here.
 				//
-				myprintf("[Thread %d]-->ClientIoAccept-->setsockopt(SO_UPDATE_ACCEPT_CONTEXT) failed to update accept socket\n", dwThreadID);
+				myprintf("[Thread %d]setsockopt(SO_UPDATE_ACCEPT_CONTEXT) failed to update accept socket\n", dwThreadID);
 				WSASetEvent(g_hCleanupEvent[0]);
 				return(0);
 			}
@@ -125,7 +126,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				lpPerSocketContext->pIOContext->SocketAccept,
 				g_hIOCP,
 				ClientIoAccept, TRUE);
-			myprintf("[Thread %d]-->ClientIoAccept-->user_UpdateCompletionPort(%p,%p)\n", dwThreadID, lpPerSocketContext->pIOContext->SocketAccept, g_hIOCP);
+			myprintf("[Thread %d]user_UpdateCompletionPort(%d,%d)\n", dwThreadID, lpPerSocketContext->pIOContext->SocketAccept, g_hIOCP);
 
 			if (lpAcceptSocketContext == NULL) {
 
@@ -137,8 +138,8 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				return(0);
 			}
 
+			myprintf("[Thread %d]dwIoSize(%d)\n", dwThreadID, dwIoSize);
 			if (dwIoSize) {
-				myprintf("[Thread %d]-->ClientIoAccept--> dwIoSize(%d)\n", dwThreadID, dwIoSize);
 				lpAcceptSocketContext->pIOContext->IOOperation = ClientIoWrite;
 				lpAcceptSocketContext->pIOContext->nTotalBytes = dwIoSize;
 				lpAcceptSocketContext->pIOContext->nSentBytes = 0;
@@ -158,11 +159,11 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 					&(lpAcceptSocketContext->pIOContext->Overlapped), NULL);
 
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError())) {
-					myprintf("WSASend() failed: %d\n", WSAGetLastError());
+					myprintf("[Thread %d]WSASend() failed: %d\n", dwThreadID,WSAGetLastError());
 					CloseClient(lpAcceptSocketContext, FALSE);
 				}
 				else if (g_bVerbose) {
-					myprintf("WorkerThread %d: Socket(%d) AcceptEx completed (%d bytes), Send posted\n",
+					myprintf("[Thread %d]Socket(%d) AcceptEx completed (%d bytes), Send posted\n",
 						GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
 				}
 			}
@@ -172,7 +173,6 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 				// AcceptEx completes but doesn't read any data so we need to post
 				// an outstanding overlapped read.
 				//
-				myprintf("[%d]-->ClientIoAccept--> ClientIoRead\n", dwThreadID);
 				lpAcceptSocketContext->pIOContext->IOOperation = ClientIoRead;
 				dwRecvNumBytes = 0;
 				dwFlags = 0;
@@ -202,7 +202,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 
 
 		case ClientIoRead:
-			myprintf("[Thread %d]--> case ClientIoRead\n", dwThreadID);
+			myprintf("[Thread %d]-->ClientIoRead\n", dwThreadID);
 			//
 			// a read operation has completed, post a write operation to echo the
 			// data back to the client using the same data buffer.
@@ -228,7 +228,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 			break;
 
 		case ClientIoWrite:
-			myprintf("[Thread %d]--> case ClientIoWrite\n", dwThreadID);
+			myprintf("[Thread %d]ClientIoWrite\n", dwThreadID);
 			//
 			// a write operation has completed, determine if all the data intended to be
 			// sent actually was sent.
@@ -254,7 +254,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 					CloseClient(lpPerSocketContext, FALSE);
 				}
 				else if (g_bVerbose) {
-					myprintf("WorkerThread %d: Socket(%d) Send partially completed (%d bytes), Recv posted\n",
+					myprintf("[Thread %d] Socket(%d) Send partially completed (%d bytes), Recv posted\n",
 						GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
 				}
 			}
@@ -278,7 +278,7 @@ DWORD WINAPI WorkerThreadNative(LPVOID WorkThreadContext)	{
 					CloseClient(lpPerSocketContext, FALSE);
 				}
 				else if (g_bVerbose) {
-					myprintf("WorkerThread %d: Socket(%d) Send completed (%d bytes), Recv posted\n",
+					myprintf("[Thread %d] Socket(%d) Send completed (%d bytes), Recv posted\n",
 						GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
 				}
 			}
